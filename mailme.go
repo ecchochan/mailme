@@ -6,7 +6,9 @@ import (
 	"html/template"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+    "os"
 	"strings"
 	"sync"
 	"time"
@@ -117,7 +119,16 @@ func (t *TemplateCache) Set(key, value string, expirationTime time.Duration) (*t
 }
 
 func (t *TemplateCache) fetchTemplate(url string, triesLeft int) (string, error) {
-	client := nfhttp.SafeHTTPClient(http.DefaultClient, t.logger)
+	var allowedIPBlocks []*net.IPNet
+	allowedCIDRs, keyExists := os.LookupEnv("MAILME_ALLOWED_CIDRS")
+	if keyExists {
+		for _, cidr := range strings.Split(allowedCIDRs, ",") {
+			_, block, _ := net.ParseCIDR(cidr)
+			allowedIPBlocks = append(allowedIPBlocks, block)
+		}
+	}
+
+	client := nfhttp.SafeHTTPClient(http.DefaultClient, t.logger, allowedIPBlocks...)
 	resp, err := client.Get(url)
 	if err != nil && triesLeft > 0 {
 		return t.fetchTemplate(url, triesLeft-1)
